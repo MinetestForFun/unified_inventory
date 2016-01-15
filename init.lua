@@ -60,7 +60,7 @@ dofile(modpath.."/api.lua")
 dofile(modpath.."/internal.lua")
 dofile(modpath.."/callbacks.lua")
 dofile(modpath.."/register.lua")
-dofile(modpath.."/bags.lua")
+--dofile(modpath.."/bags.lua")
 
 dofile(modpath.."/item_names.lua")
 
