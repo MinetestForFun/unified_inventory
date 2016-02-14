@@ -27,7 +27,8 @@ unified_inventory.register_button("bags", {
 	type = "image",
 	image = "ui_bags_icon.png",
 	tooltip = S("Bags"),
-	hide_lite=true
+	hide_lite=true,
+	show_with = false, --Modif MFF (Crabman 30/06/2015)
 })
 
 

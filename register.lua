@@ -30,13 +30,15 @@ trash:set_size("main", 1)
 unified_inventory.register_button("craft", {
 	type = "image",
 	image = "ui_craft_icon.png",
-	tooltip = S("Crafting Grid")
+	tooltip = S("Crafting Grid"),
+	show_with = false, --Modif MFF (Crabman 30/06/2015)
 })
 
 unified_inventory.register_button("craftguide", {
 	type = "image",
 	image = "ui_craftguide_icon.png",
-	tooltip = S("Crafting Guide")
+	tooltip = S("Crafting Guide"),
+	show_with = false, --Modif MFF (Crabman 30/06/2015)
 })
 
 unified_inventory.register_button("home_gui_set", {
@@ -44,38 +46,28 @@ unified_inventory.register_button("home_gui_set", {
 	image = "ui_sethome_icon.png",
 	tooltip = S("Set home position"),
 	hide_lite=true,
+	show_with = "interact", --Modif MFF (Crabman 30/06/2015)
 	action = function(player)
-		local player_name = player:get_player_name()
-		if minetest.check_player_privs(player_name, {home=true}) then
-			unified_inventory.set_home(player, player:getpos())
-			local home = unified_inventory.home_pos[player_name]
-			if home ~= nil then
+			if home.sethome(player:get_player_name()) == true then --modif  MFF
 				minetest.sound_play("dingdong",
-						{to_player=player_name, gain = 1.0})
-				minetest.chat_send_player(player_name,
-					S("Home position set to: %s"):format(minetest.pos_to_string(home)))
+					{to_player=player:get_player_name(), gain = 1.0})
 			end
-		else
-			minetest.chat_send_player(player_name,
-				S("You don't have the \"home\" privilege!"))
-		end
-	end,
+		end,
 })
+
+
+
 
 unified_inventory.register_button("home_gui_go", {
 	type = "image",
 	image = "ui_gohome_icon.png",
 	tooltip = S("Go home"),
 	hide_lite=true,
+	show_with = "interact", --Modif MFF (Crabman 30/06/2015)
 	action = function(player)
-		local player_name = player:get_player_name()
-		if minetest.check_player_privs(player_name, {home=true}) then
+		if home.tohome(player:get_player_name()) == true then --modif  MFF
 			minetest.sound_play("teleport",
 				{to_player=player:get_player_name(), gain = 1.0})
-			unified_inventory.go_home(player)
-		else
-			minetest.chat_send_player(player_name,
-				S("You don't have the \"home\" privilege!"))
 		end
 	end,
 })
@@ -85,6 +77,7 @@ unified_inventory.register_button("misc_set_day", {
 	image = "ui_sun_icon.png",
 	tooltip = S("Set time to day"),
 	hide_lite=true,
+	show_with = "settime", --Modif MFF (Crabman 30/06/2015)
 	action = function(player)
 		local player_name = player:get_player_name()
 		if minetest.check_player_privs(player_name, {settime=true}) then
@@ -105,6 +98,7 @@ unified_inventory.register_button("misc_set_night", {
 	image = "ui_moon_icon.png",
 	tooltip = S("Set time to night"),
 	hide_lite=true,
+	show_with = "settime", --Modif MFF (Crabman 30/06/2015)
 	action = function(player)
 		local player_name = player:get_player_name()
 		if minetest.check_player_privs(player_name, {settime=true}) then
@@ -117,6 +111,26 @@ unified_inventory.register_button("misc_set_night", {
 			minetest.chat_send_player(player_name,
 					S("You don't have the settime privilege!"))
 		end
+	end,
+})
+
+unified_inventory.register_button("nether_to_hell", {
+	type = "image",
+	image = "ui_to_hell.png",
+	tooltip = S("Go to the Nether"),
+	action = function(player)
+		nether.player_to_nether(player, true)
+		player:moveto({x = 0, y = -20000, z = 0})
+	end,
+})
+
+unified_inventory.register_button("nether_from_hell", {
+	type = "image",
+	image = "ui_from_hell.png",
+	tooltip = S("Go back from the Nether"),
+	action = function(player)
+		nether.player_from_nether(player)
+		player:moveto((minetest.string_to_pos(minetest.setting_get("static_spawnpoint")) or {x = 0, y = 10, z = 0}))
 	end,
 })
 
@@ -168,6 +182,11 @@ unified_inventory.register_page("craft", {
 
 -- stack_image_button(): generate a form button displaying a stack of items
 --
+-- Normally a simple item_image_button[] is used.  If the stack contains
+-- more than one item, item_image_button[] doesn't have an option to
+-- display an item count in the way that an inventory slot does, so
+-- we have to fake it using the label facility.
+--
 -- The specified item may be a group.  In that case, the group will be
 -- represented by some item in the group, along with a flag indicating
 -- that it's a group.  If the group contains only one item, it will be
@@ -177,7 +196,7 @@ local function stack_image_button(x, y, w, h, buttonname_prefix, item)
 	local name = item:get_name()
 	local count = item:get_count()
 	local show_is_group = false
-	local displayitem = name.." "..count
+	local displayitem = name
 	local selectitem = name
 	if name:sub(1, 6) == "group:" then
 		local group_name = name:sub(7)
@@ -186,7 +205,8 @@ local function stack_image_button(x, y, w, h, buttonname_prefix, item)
 		displayitem = group_item.item or "unknown"
 		selectitem = group_item.sole and displayitem or name
 	end
-	local label = show_is_group and "G" or ""
+	local label = string.format("\n\n%s%7d", show_is_group and "  G\n" or "  ", count):gsub(" 1$", " .")
+	if label == "\n\n        ." then label = "" end
 	return string.format("item_image_button[%f,%f;%u,%u;%s;%s;%s]",
 			x, y, w, h,
 			minetest.formspec_escape(displayitem),
