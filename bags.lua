@@ -128,6 +128,17 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
 			end
 			unified_inventory.set_inventory_formspec(player, "bag"..i)
 			return
+		elseif fields["unequip_bag" .. i] then
+			local stack = unified_inventory.extract_bag(player, i)
+			if not stack then
+				return
+			elseif not player:get_inventory():room_for_item("main", stack) then
+				local pos = player:getpos()
+				pos.y = pos.y + 2
+				minetest.add_item(pos, stack)
+				return
+			end
+			player:get_inventory():add_item("main", stack)
 		end
 	end
 end)
