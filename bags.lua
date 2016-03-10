@@ -10,10 +10,10 @@ unified_inventory.register_page("bags", {
 		local player_name = player:get_player_name()
 		local formspec = "background[0.06,0.99;7.92,7.52;ui_bags_main_form.png]"
 		formspec = formspec.."label[0,0;"..S("Bags").."]"
-		formspec = formspec.."button[0,2;2,0.5;bag1;Bag 1]" 
-		formspec = formspec.."button[2,2;2,0.5;bag2;Bag 2]"
-		formspec = formspec.."button[4,2;2,0.5;bag3;Bag 3]"
-		formspec = formspec.."button[6,2;2,0.5;bag4;Bag 4]"
+		formspec = formspec.."button[0,2;2,0.5;bag1;Bag 1]" .. "button[0,3;2,0.5;unequip_bag1;Unequip]"
+		formspec = formspec.."button[2,2;2,0.5;bag2;Bag 2]" .. "button[2,3;2,0.5;unequip_bag2;Unequip]"
+		formspec = formspec.."button[4,2;2,0.5;bag3;Bag 3]" .. "button[4,3;2,0.5;unequip_bag3;Unequip]"
+		formspec = formspec.."button[6,2;2,0.5;bag4;Bag 4]" .. "button[6,3;2,0.5;unequip_bag4;Unequip]"
 		formspec = formspec.."listcolors[#00000000;#00000000]"
 		formspec = formspec.."list[detached:"..minetest.formspec_escape(player_name).."_bags;bag1;0.5,1;1,1;]"
 		formspec = formspec.."list[detached:"..minetest.formspec_escape(player_name).."_bags;bag2;2.5,1;1,1;]"
@@ -132,6 +132,9 @@ minetest.register_on_player_receive_fields(function(player, formname, fields)
 			local stack = unified_inventory.extract_bag(player, i)
 			if not stack then
 				return
+			elseif stack == "overflow" then
+				minetest.chat_send_player(player:get_player_name(), "You bag is too heavy to be unequipped... Remove some items and retry")
+				return
 			elseif not player:get_inventory():room_for_item("main", stack) then
 				local pos = player:getpos()
 				pos.y = pos.y + 2
@@ -147,23 +150,24 @@ minetest.register_on_joinplayer(function(player)
 	local player_inv = player:get_inventory()
 	local bags_inv = minetest.create_detached_inventory(player:get_player_name().."_bags",{
 		on_put = function(inv, listname, index, stack, player)
-			player:get_inventory():set_stack(listname, index, stack)
-			player:get_inventory():set_size(listname.."contents",
+			local pinv = player:get_inventory()
+			pinv:set_stack(listname, index, stack)
+			pinv:set_size(listname.."contents",
 					stack:get_definition().groups.bagslots)
+
+			-- Retrieve the serialized inventory if any
+			if stack:get_metadata() ~= "" then
+				for i, item in pairs(minetest.deserialize(stack:get_metadata())) do
+					pinv:set_stack(listname .. "contents", i, ItemStack(item))
+				end
+			end
 		end,
-		on_take = function(inv, listname, index, stack, player)
-			player:get_inventory():set_stack(listname, index, nil)
+		allow_take = function()
+			return 0
 		end,
 		allow_put = function(inv, listname, index, stack, player)
 			if stack:get_definition().groups.bagslots then
 				return 1
-			else
-				return 0
-			end
-		end,
-		allow_take = function(inv, listname, index, stack, player)
-			if player:get_inventory():is_empty(listname.."contents") then
-				return stack:get_count()
 			else
 				return 0
 			end
@@ -199,20 +203,46 @@ minetest.register_tool("unified_inventory:bag_large", {
 	groups = {bagslots=24},
 })
 
+local colours = {"orange", "blue", "green", "purple"}
+
+for _, colour in pairs(colours) do
+	minetest.register_tool("unified_inventory:bag_small_" .. colour, {
+		description = S("Small Bag"),
+		inventory_image = "bags_small_" .. colour .. ".png",
+		groups = {bagslots=8},
+	})
+
+	minetest.register_tool("unified_inventory:bag_medium_" .. colour, {
+		description = S("Medium Bag"),
+		inventory_image = "bags_medium_" .. colour .. ".png",
+		groups = {bagslots=16},
+	})
+
+	minetest.register_tool("unified_inventory:bag_large_" .. colour, {
+		description = S("Large Bag"),
+		inventory_image = "bags_large_" .. colour .. ".png",
+		groups = {bagslots=24},
+	})
+end
+
+--minetest.register_alias("unified_inventory:bag_small", "unified_inventory:bad_small_red")
+--minetest.register_alias("unified_inventory:bag_medium", "unified_inventory:bad_medium_red")
+--minetest.register_alias("unified_inventory:bag_large", "unified_inventory:bad_large_red")
+
 -- register bag crafts
 minetest.register_craft({
 	output = "unified_inventory:bag_small",
 	recipe = {
 		{"",           "farming:cotton", ""},
-		{"group:wool", "group:wool",     "group:wool"},
-		{"group:wool", "group:wool",     "group:wool"},
+		{"group:wool", "group:wool",    "group:wool"},
+		{"group:wool", "group:wool",    "group:wool"},
 	},
 })
 
 minetest.register_craft({
 	output = "unified_inventory:bag_medium",
 	recipe = {
-		{"",               "",                            ""},
+		{"",              "",                            ""},
 		{"farming:cotton", "unified_inventory:bag_small", "farming:cotton"},
 		{"farming:cotton", "unified_inventory:bag_small", "farming:cotton"},
 	},
@@ -221,9 +251,41 @@ minetest.register_craft({
 minetest.register_craft({
 	output = "unified_inventory:bag_large",
 	recipe = {
-		{"",               "",                             ""},
+		{"",              "",                             ""},
 		{"farming:cotton", "unified_inventory:bag_medium", "farming:cotton"},
 		{"farming:cotton", "unified_inventory:bag_medium", "farming:cotton"},
     },
 })
 
+function unified_inventory.extract_bag(player, id)
+	if not player then
+		minetest.log("error", "[u_inv] Invalid player for bag extraction : nil")
+		return
+	end
+	if tonumber(id) == nil or id > 4 or id < 0 then
+		minetest.log("error", "Invalid id: " .. (id or 'nil'))
+		return
+	end
+
+	local stack = player:get_inventory():get_stack("bag"..id, 1)
+	if not stack:get_definition().groups.bagslots then
+		return
+	end
+	local pinv = player:get_inventory()
+	local inv = pinv:get_list("bag" .. id .. "contents")
+	local list = {}
+	for i, item in pairs(inv) do
+		list[i] = item:to_table()
+	end
+	if minetest.serialize(list):len() >= 4096 then
+		minetest.log("warning", "[U_Inv] Preventing metadata overflow with bag metadata")
+		return "overflow"
+	end
+
+	pinv:remove_item("bag" .. id, stack)
+	minetest.get_inventory({type = "detached", name = minetest.formspec_escape(player:get_player_name()) .. "_bags"}):set_stack("bag" .. id, 1, nil)
+	pinv:set_list("bag" .. id .. "contents", {})
+
+	stack:set_metadata(minetest.serialize(list))
+	return stack
+end
