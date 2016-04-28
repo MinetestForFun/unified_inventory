@@ -93,7 +93,8 @@ function unified_inventory.get_formspec(player, page)
 	local filtered_inv_buttons = {}
 
 	for i, def in pairs(unified_inventory.buttons) do
-		if not (draw_lite_mode and def.hide_lite) then 
+		if not (draw_lite_mode and def.hide_lite)
+			and (not def.show_with or minetest.check_player_privs(player_name, {[def.show_with] = true})) then
 			table.insert(filtered_inv_buttons, def)
 		end
 	end
